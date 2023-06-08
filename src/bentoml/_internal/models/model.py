@@ -322,6 +322,7 @@ class Model(StoreItem):
         method_configs: dict[str, dict[str, int]] | None = None,
         embedded: bool = False,
         scheduling_strategy: type[Strategy] | None = None,
+        ivy_transpile=False,
     ) -> Runner:
         """
         TODO(chaoyu): add docstring
@@ -348,7 +349,9 @@ class Model(StoreItem):
                 f"Yatai of version {yatai_version} is incompatible with embedded runner, set `embedded=False` for runner {name}"
             )
             embedded = False
-
+            
+        self.ivy_transpile = ivy_transpile
+        
         return Runner(
             self.to_runnable(),
             name=name if name != "" else self.tag.name,
@@ -362,7 +365,12 @@ class Model(StoreItem):
 
     def to_runnable(self) -> t.Type[Runnable]:
         if self._runnable is None:
-            self._runnable = self.info.imported_module.get_runnable(self)
+            if self.ivy_transpile:
+                # todo: find better way to do this
+                import bentoml
+                self._runnable = bentoml.flax.get_runnable(self, self.ivy_transpile)
+            else:
+                self._runnable = self.info.imported_module.get_runnable(self)
         return self._runnable
 
     def load_model(self, *args: t.Any, **kwargs: t.Any) -> t.Any:

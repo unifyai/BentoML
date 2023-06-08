@@ -93,6 +93,7 @@ def get(tag_like: str | Tag) -> bentoml.Model:
 def load_model(
     bento_model: str | Tag | bentoml.Model,
     init: bool = True,
+    ivy_transpile = False,
     device: str | XlaBackend = "cpu",
 ) -> tuple[nn.Module, dict[str, t.Any]]:
     """
@@ -123,39 +124,54 @@ def load_model(
     # NOTE: we need to hide all GPU from TensorFlow, otherwise it will try to allocate
     # memory on the GPU and make it unavailable for JAX.
     tf.config.experimental.set_visible_devices([], "GPU")
-
-    if not isinstance(bento_model, bentoml.Model):
-        bento_model = get(bento_model)
-    if bento_model.info.module not in (MODULE_NAME, __name__):
-        raise NotFound(
-            f"Model {bento_model.tag} was saved with module {bento_model.info.module}, failed loading with {MODULE_NAME}."
-        )
-    if "_module" not in bento_model.custom_objects:
-        raise BentoMLException(
-            f"Model {bento_model.tag} was either corrupt or not saved with 'bentoml.flax.save_model()'."
-        )
-    module: nn.Module = bento_model.custom_objects["_module"]
-
-    serialized = bento_model.path_of(MODEL_FILENAME)
-    try:
-        with open(serialized, "rb") as f:
-            state_dict: dict[str, t.Any] = serialization.from_bytes(module, f.read())
-    except (UnpicklingError, msgpack.exceptions.ExtraData, UnicodeDecodeError) as err:
-        raise BentoMLException(
-            f"Unable to covert model {bento_model.tag}'s state_dict: {err}"
-        ) from None
-
-    # ensure that all arrays are restored as jnp.ndarray
-    # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
-    # https://github.com/google/flax/issues/1261
-    if init:
-        state_dict = jax.tree_util.tree_map(jnp.array, state_dict)
+    if ivy_transpile:
+        # use ivy.transpile when this is resolved
+        # https://github.com/unifyai/graph-compiler/issues/189
+        # from ivy.compiler.compiler import transpile
+        from transpiler.transpiler import transpile
+        # add logic to use whichever framework the model was saved in
+        # for demo: assuming model will always be pytorch from ivy_transpile=True
+        torch_model, custom_objects = bentoml.pytorch.load_model(bento_model, device, get_custom_objects=True)
+        flax_graph = transpile(torch_model, to="flax", args=(custom_objects['input'].to(device),))
+        np_image = custom_objects['input'].detach().cpu().numpy()
+        rng_key = jax.random.PRNGKey(0)
+        params = flax_graph.init(rng_key, np_image) # Initialization call
+        # params = flax.core.frozen_dict.freeze(params)
+        return flax_graph, params
+        
     else:
-        # keep the params on given device if we don't want to initialize
-        state_dict = jax.tree_util.tree_map(
-            lambda s: jax.device_put(s, jax.devices(device)[0]), state_dict
-        )
-    return module, state_dict
+        if not isinstance(bento_model, bentoml.Model):
+            bento_model = get(bento_model, ivy_transpile)
+        if bento_model.info.module not in (MODULE_NAME, __name__) and not ivy_transpile:
+            raise NotFound(
+                f"Model {bento_model.tag} was saved with module {bento_model.info.module}, failed loading with {MODULE_NAME}."
+            )
+        if "_module" not in bento_model.custom_objects:
+            raise BentoMLException(
+                f"Model {bento_model.tag} was either corrupt or not saved with 'bentoml.flax.save_model()'."
+            )
+        module: nn.Module = bento_model.custom_objects["_module"]
+
+        serialized = bento_model.path_of(MODEL_FILENAME)
+        try:
+            with open(serialized, "rb") as f:
+                state_dict: dict[str, t.Any] = serialization.from_bytes(module, f.read())
+        except (UnpicklingError, msgpack.exceptions.ExtraData, UnicodeDecodeError) as err:
+            raise BentoMLException(
+                f"Unable to covert model {bento_model.tag}'s state_dict: {err}"
+            ) from None
+
+        # ensure that all arrays are restored as jnp.ndarray
+        # NOTE: This is to prevent a bug this will be fixed in Flax >= v0.3.4:
+        # https://github.com/google/flax/issues/1261
+        if init:
+            state_dict = jax.tree_util.tree_map(jnp.array, state_dict)
+        else:
+            # keep the params on given device if we don't want to initialize
+            state_dict = jax.tree_util.tree_map(
+                lambda s: jax.device_put(s, jax.devices(device)[0]), state_dict
+            )
+        return module, state_dict
 
 
 def save_model(
@@ -257,7 +273,7 @@ def save_model(
         return bento_model
 
 
-def get_runnable(bento_model: bentoml.Model) -> t.Type[bentoml.Runnable]:
+def get_runnable(bento_model: bentoml.Model, ivy_transpile) -> t.Type[bentoml.Runnable]:
     """Private API: use :obj:`~bentoml.Model.to_runnable` instead."""
     partial_kwargs: dict[str, t.Any] = bento_model.info.options.partial_kwargs
 
@@ -269,7 +285,7 @@ def get_runnable(bento_model: bentoml.Model) -> t.Type[bentoml.Runnable]:
             super().__init__()
             self.device = xla_bridge.get_backend().platform
 
-            self.model, self.state_dict = load_model(bento_model, device=self.device)
+            self.model, self.state_dict = load_model(bento_model, device=self.device, ivy_transpile=ivy_transpile)
             self.params = self.state_dict["params"]
             self.methods_cache: t.Dict[str, t.Callable[..., t.Any]] = {}
 

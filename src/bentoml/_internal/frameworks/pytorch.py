@@ -46,8 +46,7 @@ def get(tag_like: str | Tag) -> Model:
 def load_model(
     bentoml_model: str | Tag | Model,
     device_id: t.Optional[str] = "cpu",
-    ivy_transpile = False,
-    inputs: torch.Tensor =None,
+    get_custom_objects = False
 ) -> torch.nn.Module:
     """
     Load a model from a BentoML Model with given name.
@@ -57,8 +56,6 @@ def load_model(
             Tag of a saved model in BentoML local modelstore.
         device_id (:code:`str`, `optional`, default to :code:`cpu`):
             Optional devices to put the given model on. Refer to `device attributes <https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device>`_.
-        ivy_transpile 
-        inputs
 
     Returns:
         :obj:`torch.nn.Module`: an instance of :code:`torch.nn.Module` from BentoML modelstore.
@@ -81,17 +78,8 @@ def load_model(
     weight_file = bentoml_model.path_of(MODEL_FILENAME)
     with Path(weight_file).open("rb") as file:
         model: "torch.nn.Module" = torch.load(file, map_location=device_id)
-    if ivy_transpile:
-        from transpiler.transpiler import transpile
-        # from ivy.compiler.compiler import transpile
-        if inputs is not None:
-            jax_graph = transpile(model, to="haiku", args=(inputs,))
-        else:
-            # lazy transpile
-            jax_graph = transpile(model, to="haiku")
-        model = None
-        return jax_graph
-        
+    if get_custom_objects:
+        return model, bentoml_model.custom_objects
     return model
 
 
