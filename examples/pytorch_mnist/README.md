@@ -117,6 +117,10 @@ Start an API server locally to test the service code above:
 ```bash
 bentoml serve service:svc --development --reload
 ```
+or
+```bash
+bentoml serve service_ivy:svc --development --reload
+```
 
 With the `--reload` flag, the API server will automatically restart when the source
 file `service.py` is being edited, to boost your development productivity.
@@ -125,6 +129,14 @@ Verify the endpoint can be accessed locally:
 
 ```bash
 curl -H "Content-Type: multipart/form-data" -F'fileobj=@samples/1.png;type=image/png' http://127.0.0.1:3000/predict_image
+```
+
+```bash
+curl -X 'POST' \
+  'http://127.0.0.1:3000/predict' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: image/xpm' \
+  --data-binary '@samples/3.png'
 ```
 
 We can also do a simple local benchmark if [locust](https://locust.io) is installed:
@@ -157,7 +169,7 @@ python:
 
 Note that we exclude `tests/` from the bento using `exclude`.
 
-Simply run `bentoml build` from current directory to build a Bento with the latest
+Simply run `bentoml build` or `bentoml build -f bentofile_ivy.yaml` from current directory to build a Bento with the latest
 version of the `pytorch_mnist` model. This may take a while when running for the first
 time for BentoML to resolve all dependency versions:
 

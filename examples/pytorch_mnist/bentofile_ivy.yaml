@@ -1,0 +1,18 @@
+service: "service_ivy:svc"
+description: "file: ./README.md"
+labels:
+  owner: bentoml-team
+  stage: demo
+include:
+- "*.py"
+exclude:
+- "tests/"
+- "locustfile.py"
+python:
+  packages:
+    - scikit-learn
+    - torch
+    - Pillow
+    - git+https://github.com/unifyai/ivy.git@b63d1919d5913ef19de5890bb35beaaaaab05f06
+    - jax[cpu]
+    - flax
