@@ -198,6 +198,9 @@ This Bento can now be loaded for serving:
 ```bash
 bentoml serve pytorch_mnist_demo:latest
 ```
+```bash
+bentoml serve mnist_flax:latest
+```
 
 The Bento directory contains all code, files, models and configs required for running this service.
 BentoML standarlizes this file structure which enables serving runtimes and deployment tools to be
@@ -245,9 +248,17 @@ server configured from this Bento:
 ```bash
 bentoml containerize pytorch_mnist_demo:latest
 ```
+or
+```bash
+bentoml containerize mnist_flax:latest
+```
 
 Test out the docker image built:
 
 ```bash
 docker run -P pytorch_mnist_demo:invwzzsw7li6zckb2ie5eubhd
+```
+or
+```bash
+docker run -P mnist_flax:
 ```
