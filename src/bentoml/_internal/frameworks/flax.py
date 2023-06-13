@@ -138,7 +138,7 @@ def load_model(
         params = flax_graph.init(rng_key, np_image) # Initialization call
         # params = flax.core.frozen_dict.freeze(params)
         return flax_graph, params
-        
+
     else:
         if not isinstance(bento_model, bentoml.Model):
             bento_model = get(bento_model, ivy_transpile)

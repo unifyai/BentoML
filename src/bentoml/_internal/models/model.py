@@ -349,9 +349,9 @@ class Model(StoreItem):
                 f"Yatai of version {yatai_version} is incompatible with embedded runner, set `embedded=False` for runner {name}"
             )
             embedded = False
-            
+
         self.ivy_transpile = ivy_transpile
-        
+
         return Runner(
             self.to_runnable(),
             name=name if name != "" else self.tag.name,
