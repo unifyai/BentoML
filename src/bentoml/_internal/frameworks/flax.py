@@ -294,6 +294,9 @@ def get_runnable(bento_model: bentoml.Model, ivy_transpile) -> t.Type[bentoml.Ru
         method_partial_kwargs = partial_kwargs.get(method_name)
         if method_partial_kwargs is not None:
             method = functools.partial(method, **method_partial_kwargs)
+        @jax.jit
+        def jit_inference(arg):
+            return self.model.apply({"params": self.params}, arg, method=method)
 
         def mapping(item: jnp.ndarray | ext.NpNDArray | ext.PdDataFrame) -> jnp.ndarray:
             if LazyType["ext.NpNDArray"]("numpy.ndarray").isinstance(item):
@@ -309,6 +312,11 @@ def get_runnable(bento_model: bentoml.Model, ivy_transpile) -> t.Type[bentoml.Ru
             params = Params[jnp.ndarray](*args).map(mapping)
 
             arg = params.args[0] if len(params.args) == 1 else params.args
+            if ivy_transpile:
+                # jax infer latency without jit is worse than uncompiled torch but
+                # todo: look into edge cases where this would fail (see following jax resource
+                # on python thread) and figure an elegant solution
+                return jit_inference(arg)
             # NOTE: can we jit this?
             # No?, as we should not interfere with JAX tracing in multiple threads
             # https://jax.readthedocs.io/en/latest/concurrency.html?highlight=concurrency
